@@ -103,28 +103,10 @@ jobs:
           which python3 && python3 --version
           
           if command -v python3 &> /dev/null; then
-            START=$(date +%s%N)
-            python3 -c "
-import json
-import time
-
-start = time.time()
-data = {'test': 'data', 'nested': {'a': 1, 'b': [1,2,3]}}
-for i in range(100000):
-    json.dumps(data)
-print('JSON serialization: ' + str(int((time.time() - start) * 1000)) + 'ms')
-"
-            END=$(date +%s%N)
+            # Inline Python script using semicolons to avoid all YAML/Python indentation conflicts
+            python3 -c "import json, time; start = time.time(); data = {'test': 'data', 'nested': {'a': 1, 'b':[1,2,3]}};[json.dumps(data) for _ in range(100000)]; print('JSON serialization: ' + str(int((time.time() - start) * 1000)) + 'ms')"
             
-            python3 -c "
-import time
-start = time.time()
-data = {'test': 'data', 'nested': {'a': 1, 'b': list(range(100))}}
-for i in range(100000):
-    import json
-    json.dumps(data)
-print('JSON dumps 100k: ' + str(int((time.time() - start) * 1000)) + 'ms')
-"
+            python3 -c "import json, time; start = time.time(); data = {'test': 'data', 'nested': {'a': 1, 'b': list(range(100))}};[json.dumps(data) for _ in range(100000)]; print('JSON dumps 100k: ' + str(int((time.time() - start) * 1000)) + 'ms')"
           fi
 
       - name: Benchmark: Rust compilation
@@ -140,38 +122,34 @@ print('JSON dumps 100k: ' + str(int((time.time() - start) * 1000)) + 'ms')
             cd rust-test
             
             # Add dependencies
-            cat >> Cargo.toml << 'EOF'
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-EOF
+            echo 'serde = { version = "1.0", features = ["derive"] }
+            serde_json = "1.0"' >> Cargo.toml
             
             # Add benchmark code
-            cat > src/main.rs << 'EOF'
-use serde::{Serialize, Deserialize};
+            echo 'use serde::{Serialize, Deserialize};
 
-#[derive(Serialize, Deserialize)]
-struct Data {
-    test: String,
-    nested: Nested,
-}
+            #[derive(Serialize, Deserialize)]
+            struct Data {
+                test: String,
+                nested: Nested,
+            }
 
-#[derive(Serialize, Deserialize)]
-struct Nested {
-    a: i32,
-    b: Vec<i32>,
-}
+            #[derive(Serialize, Deserialize)]
+            struct Nested {
+                a: i32,
+                b: Vec<i32>,
+            }
 
-fn main() {
-    let data = Data {
-        test: "test".to_string(),
-        nested: Nested { a: 1, b: (0..100).collect() },
-    };
-    for _ in 0..10000 {
-        let _ = serde_json::to_string(&data);
-    }
-    println!("Rust JSON serialization: done");
-}
-EOF
+            fn main() {
+                let data = Data {
+                    test: String::from("test"),
+                    nested: Nested { a: 1, b: (0..100).collect() },
+                };
+                for _ in 0..10000 {
+                    let _ = serde_json::to_string(&data);
+                }
+                println!("Rust JSON serialization: done");
+            }' > src/main.rs
             
             START=$(date +%s%N)
             cargo build --release 2>&1 | tail -5
@@ -208,7 +186,7 @@ EOF
         run: |
           echo "=== Network Speed Test ==="
           
-          # Download speed test (Swapped roughly 2GB ISO for a 100MB test bin file)
+          # Download speed test
           START=$(date +%s%N)
           curl -s -o /dev/null https://speed.hetzner.de/100MB.bin 2>&1
           END=$(date +%s%N)
@@ -246,7 +224,7 @@ EOF
   # Blacksmith Runner benchmark  
   benchmark-blacksmith:
     if: inputs.runner_type == 'blacksmith'
-    runs-on: [self-hosted, blacksmith]
+    runs-on:[self-hosted, blacksmith]
     name: Blacksmith Runner Benchmark
     
     steps:
