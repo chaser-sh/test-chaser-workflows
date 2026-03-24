@@ -223,7 +223,7 @@ jobs:
   # Blacksmith Runner benchmark  
   benchmark-blacksmith:
     if: inputs.runner_type == 'blacksmith'
-    runs-on: [self-hosted, blacksmith]
+    runs-on:[self-hosted, blacksmith]
     name: Blacksmith Runner Benchmark
     
     steps:
@@ -238,7 +238,7 @@ jobs:
   # Depo Runner benchmark
   benchmark-depo:
     if: inputs.runner_type == 'depo'
-    runs-on:[self-hosted, depo]
+    runs-on: [self-hosted, depo]
     name: Depo Runner Benchmark
     
     steps:
@@ -252,7 +252,7 @@ jobs:
 
   # Compare all runners
   compare-runners:
-    needs: [benchmark-chaser, benchmark-standard, benchmark-blacksmith, benchmark-depo]
+    needs:[benchmark-chaser, benchmark-standard, benchmark-blacksmith, benchmark-depo]
     if: always()
     runs-on: ubuntu-latest
     name: Results Summary
