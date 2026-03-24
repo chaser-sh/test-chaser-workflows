@@ -122,7 +122,7 @@ jobs:
         run: |
           echo "=== Network Speed Test ==="
           START=$(date +%s%N)
-          curl -s -o /dev/null https://speed.hetzner.de/100MB.bin 2>&1
+          curl -s -o /dev/null https://ash-speed.hetzner.com/100MB.bin 2>&1
           END=$(date +%s%N)
           echo "Download 100MB: $(( (END - START) / 1000000 ))ms"
 
