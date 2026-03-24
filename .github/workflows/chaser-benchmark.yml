@@ -13,7 +13,7 @@ on:
           - chaser
           - standard
           - blacksmith
-          - depo
+          - warp
       session_id:
         description: 'Session ID'
         required: false
@@ -36,7 +36,7 @@ jobs:
           CHASER='{"id":"chaser","name":"Chaser Sandbox","labels":["self-hosted","chaser"]}'
           STANDARD='{"id":"standard","name":"GitHub Standard","labels":"ubuntu-latest"}'
           BLACKSMITH='{"id":"blacksmith","name":"Blacksmith","labels":"blacksmith-2vcpu-ubuntu-2404"}'
-          DEPO='{"id":"depo","name":"Depo","labels":"depot-ubuntu-24.04"}'
+          warp='{"id":"warp","name":"Warp","labels":"warp-ubuntu-latest-x64-4x"}'
           
           CHOICE="${{ github.event.inputs.runner_type }}"
           
