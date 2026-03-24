@@ -104,7 +104,6 @@ jobs:
           
           if command -v python3 &> /dev/null; then
             python3 -c "import json, time; start = time.time(); data = {'test': 'data', 'nested': {'a': 1, 'b':[1,2,3]}};[json.dumps(data) for _ in range(100000)]; print('JSON serialization: ' + str(int((time.time() - start) * 1000)) + 'ms')"
-            
             python3 -c "import json, time; start = time.time(); data = {'test': 'data', 'nested': {'a': 1, 'b': list(range(100))}};[json.dumps(data) for _ in range(100000)]; print('JSON dumps 100k: ' + str(int((time.time() - start) * 1000)) + 'ms')"
           fi
 
@@ -120,33 +119,17 @@ jobs:
             cargo new rust-test > /dev/null 2>&1
             cd rust-test
             
-            # Add dependencies
-            echo 'serde = { version = "1.0", features = ["derive"] }
-            serde_json = "1.0"' >> Cargo.toml
+            echo 'serde = { version = "1.0", features = ["derive"] }' >> Cargo.toml
+            echo 'serde_json = "1.0"' >> Cargo.toml
             
-            # Add benchmark code
             echo 'use serde::{Serialize, Deserialize};
-
             #[derive(Serialize, Deserialize)]
-            struct Data {
-                test: String,
-                nested: Nested,
-            }
-
+            struct Data { test: String, nested: Nested }
             #[derive(Serialize, Deserialize)]
-            struct Nested {
-                a: i32,
-                b: Vec<i32>,
-            }
-
+            struct Nested { a: i32, b: Vec<i32> }
             fn main() {
-                let data = Data {
-                    test: String::from("test"),
-                    nested: Nested { a: 1, b: (0..100).collect() },
-                };
-                for _ in 0..10000 {
-                    let _ = serde_json::to_string(&data);
-                }
+                let data = Data { test: String::from("test"), nested: Nested { a: 1, b: (0..100).collect() } };
+                for _ in 0..10000 { let _ = serde_json::to_string(&data); }
                 println!("Rust JSON serialization: done");
             }' > src/main.rs
             
@@ -159,113 +142,68 @@ jobs:
       - name: 'Benchmark: File I/O'
         run: |
           echo "=== File I/O Benchmark ==="
-          
-          # Large file write
           START=$(date +%s%N)
           dd if=/dev/urandom of=/tmp/testfile bs=1M count=100 2>&1 | tail -1
           END=$(date +%s%N)
           echo "Write 100MB: $(( (END - START) / 1000000 ))ms"
           
-          # Large file read
           START=$(date +%s%N)
           cat /tmp/testfile > /dev/null
           END=$(date +%s%N)
           echo "Read 100MB: $(( (END - START) / 1000000 ))ms"
-          
-          # Many small files
-          mkdir -p /tmp/file-test
-          START=$(date +%s%N)
-          for i in $(seq 1 1000); do
-            echo "test content $i" > /tmp/file-test/file_$i.txt
-          done
-          END=$(date +%s%N)
-          echo "Create 1000 files: $(( (END - START) / 1000000 ))ms"
 
       - name: 'Benchmark: Network speed'
         run: |
           echo "=== Network Speed Test ==="
-          
-          # Download speed test
           START=$(date +%s%N)
           curl -s -o /dev/null https://speed.hetzner.de/100MB.bin 2>&1
           END=$(date +%s%N)
           echo "Download 100MB: $(( (END - START) / 1000000 ))ms"
-          
-          # Ping test
-          ping -c 5 8.8.8.8 2>/dev/null | tail -1
 
       - name: Cleanup
         run: |
-          rm -rf /tmp/linux-test /tmp/node-test /tmp/rust-test /tmp/testfile /tmp/file-test
+          rm -rf /tmp/linux-test /tmp/node-test /tmp/rust-test /tmp/testfile
           echo "Cleanup complete"
-
-      - name: Summary
-        run: |
-          echo "=== Benchmark Complete ==="
-          echo "Runner: Chaser Sandbox"
-          echo "Completed at: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
   # Standard GitHub Runner benchmark
   benchmark-standard:
     if: inputs.runner_type == 'standard'
     runs-on: ubuntu-latest
     name: Standard Runner Benchmark
-    
     steps:
       - uses: actions/checkout@v4
-      
       - name: Run benchmarks
-        run: |
-          echo "Running standard runner benchmarks..."
-          echo "Runner: ubuntu-latest"
-          date -u +%Y-%m-%dT%H:%M:%SZ
+        run: date -u +%Y-%m-%dT%H:%M:%SZ
 
   # Blacksmith Runner benchmark  
   benchmark-blacksmith:
     if: inputs.runner_type == 'blacksmith'
-    runs-on:[self-hosted, blacksmith]
+    runs-on: [self-hosted, blacksmith]
     name: Blacksmith Runner Benchmark
-    
     steps:
       - uses: actions/checkout@v4
-      
       - name: Run benchmarks
-        run: |
-          echo "Running blacksmith runner benchmarks..."
-          echo "Runner: Blacksmith"
-          date -u +%Y-%m-%dT%H:%M:%SZ
+        run: date -u +%Y-%m-%dT%H:%M:%SZ
 
   # Depo Runner benchmark
   benchmark-depo:
     if: inputs.runner_type == 'depo'
     runs-on: [self-hosted, depo]
     name: Depo Runner Benchmark
-    
     steps:
       - uses: actions/checkout@v4
-      
       - name: Run benchmarks
-        run: |
-          echo "Running depo runner benchmarks..."
-          echo "Runner: Depo"
-          date -u +%Y-%m-%dT%H:%M:%SZ
+        run: date -u +%Y-%m-%dT%H:%M:%SZ
 
-  # Compare all runners
+  # Results Summary
   compare-runners:
-    needs:[benchmark-chaser, benchmark-standard, benchmark-blacksmith, benchmark-depo]
+    needs: [benchmark-chaser, benchmark-standard, benchmark-blacksmith, benchmark-depo]
     if: always()
     runs-on: ubuntu-latest
     name: Results Summary
-    
     steps:
       - name: Generate comparison report
         run: |
           echo "=== Benchmark Results Summary ==="
-          echo ""
-          echo "| Metric | Value |"
-          echo "|--------|-------|"
-          echo "| Runner Type Tested | ${{ inputs.runner_type || 'chaser' }} |"
-          echo "| Date | $(date -u +%Y-%m-%d) |"
-          echo "| Workflow Run | ${{ github.run_id }} |"
-          echo ""
-          echo "View detailed logs in the respective benchmark job above."
+          echo "Runner Type Tested: ${{ inputs.runner_type || 'chaser' }}"
+          echo "Workflow Run: ${{ github.run_id }}"
