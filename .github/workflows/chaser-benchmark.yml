@@ -8,7 +8,7 @@ on:
         required: true
         default: 'all'
         type: choice
-        options: [all, chaser, standard, blacksmith, depo]
+        options: [all, chaser, standard, blacksmith]
 
 jobs:
   setup:
@@ -21,10 +21,9 @@ jobs:
           CHASER='{"id":"chaser","name":"Chaser 9950X","labels":["self-hosted","chaser"]}'
           STANDARD='{"id":"standard","name":"GitHub Standard","labels":"ubuntu-latest"}'
           BLACKSMITH='{"id":"blacksmith","name":"Blacksmith","labels":"blacksmith-2vcpu-ubuntu-2404"}'
-          DEPO='{"id":"depo","name":"Depo","labels":"depot-ubuntu-24.04"}'
           CHOICE="${{ github.event.inputs.runner_type }}"
-          if [ "$CHOICE" = "all" ]; then JSON="{\"include\":[$CHASER,$STANDARD,$BLACKSMITH,$DEPO]}"; else
-          case $CHOICE in "chaser") J=$CHASER ;; "standard") J=$STANDARD ;; "blacksmith") J=$BLACKSMITH ;; "depo") J=$DEPO ;; esac
+          if [ "$CHOICE" = "all" ]; then JSON="{\"include\":[$CHASER,$STANDARD,$BLACKSMITH]}"; else
+          case $CHOICE in "chaser") J=$CHASER ;; "standard") J=$STANDARD ;; "blacksmith") J=$BLACKSMITH ;; esac
           JSON="{\"include\":[$J]}"; fi
           echo "matrix=$JSON" >> $GITHUB_OUTPUT
 
