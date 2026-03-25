@@ -8,23 +8,9 @@ on:
         required: true
         default: 'all'
         type: choice
-        options:
-          - all
-          - chaser
-          - standard
-          - blacksmith
-          - warp
-      session_id:
-        description: 'Session ID'
-        required: false
-        type: string
-
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+        options: [all, chaser, standard, blacksmith, depo]
 
 jobs:
-  # STEP 1: Determine which runners to include in the test
   setup:
     runs-on: ubuntu-latest
     outputs:
@@ -32,128 +18,64 @@ jobs:
     steps:
       - id: set-matrix
         run: |
-          # Define all possible runners
-          CHASER='{"id":"chaser","name":"Chaser Sandbox","labels":["self-hosted","chaser"]}'
+          CHASER='{"id":"chaser","name":"Chaser 9950X","labels":["self-hosted","chaser"]}'
           STANDARD='{"id":"standard","name":"GitHub Standard","labels":"ubuntu-latest"}'
           BLACKSMITH='{"id":"blacksmith","name":"Blacksmith","labels":"blacksmith-2vcpu-ubuntu-2404"}'
-          WARP='{"id":"warp","name":"Warp","labels":"warp-ubuntu-latest-x64-4x"}'
-          
+          DEPO='{"id":"depo","name":"Depo","labels":"depot-ubuntu-24.04"}'
           CHOICE="${{ github.event.inputs.runner_type }}"
-          
-          if [ "$CHOICE" = "all" ]; then
-            JSON="{\"include\":[$CHASER,$STANDARD,$BLACKSMITH,$WARP]}"
-          elif [ "$CHOICE" = "chaser" ]; then
-            JSON="{\"include\":[$CHASER]}"
-          elif [ "$CHOICE" = "standard" ]; then
-            JSON="{\"include\":[$STANDARD]}"
-          elif [ "$CHOICE" = "blacksmith" ]; then
-            JSON="{\"include\":[$BLACKSMITH]}"
-          else
-            JSON="{\"include\":[$WARP]}"
-          fi
-          
+          if [ "$CHOICE" = "all" ]; then JSON="{\"include\":[$CHASER,$STANDARD,$BLACKSMITH,$DEPO]}"; else
+          case $CHOICE in "chaser") J=$CHASER ;; "standard") J=$STANDARD ;; "blacksmith") J=$BLACKSMITH ;; "depo") J=$DEPO ;; esac
+          JSON="{\"include\":[$J]}"; fi
           echo "matrix=$JSON" >> $GITHUB_OUTPUT
 
-  # STEP 2: Run the benchmarks on the selected runners
   run-benchmarks:
     needs: setup
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.setup.outputs.matrix) }}
-    
     runs-on: ${{ matrix.labels }}
-    name: 'Benchmark: ${{ matrix.name }}'
-    
+    name: 'Bench: ${{ matrix.name }}'
     steps:
-      - name: 'Checkout code'
-        uses: actions/checkout@v4
-
-      - name: 'Display runner info'
+      - name: '1. RAW CPU: Parallel Compression'
         run: |
-          echo "Runner Type: ${{ matrix.name }}"
-          echo "Session ID: ${{ github.event.inputs.session_id || 'dispatched' }}"
-          echo "Started at: $(date -u '+%Y-%m-%dT%H:%M:%SZ')"
-
-      - name: 'Environment info'
-        run: |
-          echo "=== System Info ==="
-          uname -a
-          echo "=== CPU Info ==="
-          if command -v sysctl &> /dev/null; then
-            sysctl -n machdep.cpu.brand_string 2>/dev/null || echo "CPU info not available"
-          else
-            cat /proc/cpuinfo 2>/dev/null | grep "model name" | head -1 || echo "CPU info not available"
-          fi
-          echo "=== Memory ==="
-          free -h 2>/dev/null || vm_stat
-          echo "=== Disk ==="
-          df -h .
-
-      - name: 'Benchmark: Clone large repo'
-        run: |
-          echo "=== Clone Linux Kernel (1GB+) ==="
+          echo "=== Generating 500MB Data & Compressing (Multi-threaded) ==="
+          # This tests raw clock speed and multi-core IPC
           START=$(date +%s%N)
-          # Use unique folder names to avoid collisions if runners share disk
-          git clone --depth 1 https://github.com/torvalds/linux.git "/tmp/linux-test-${{ matrix.id }}" 2>&1 | tail -5
+          dd if=/dev/urandom bs=1M count=500 of=testdata 2>/dev/null
+          tar -cf - testdata | xz -T0 -3 > testdata.xz
           END=$(date +%s%N)
-          echo "Time: $(( (END - START) / 1000000 ))ms"
+          echo "XZ Compression Time: $(( (END - START) / 1000000 ))ms"
 
-      - name: 'Benchmark: Node.js operations'
+      - name: '2. RAW CPU: OpenSSL Speed'
         run: |
-          echo "=== Node.js Operations ==="
-          if command -v node &> /dev/null; then
-            mkdir -p "/tmp/node-test-${{ matrix.id }}"
-            cd "/tmp/node-test-${{ matrix.id }}"
-            npm init -y > /dev/null 2>&1
-            START=$(date +%s%N)
-            npm install lodash express 2>&1 | tail -3
-            END=$(date +%s%N)
-            echo "npm install time: $(( (END - START) / 1000000 ))ms"
-            node -e "const _ = require('lodash'); const start = Date.now(); for(let i = 0; i < 100000; i++) _.cloneDeep({a:1,b:{c:2}}); console.log('Lodash clone: ' + (Date.now() - start) + 'ms');"
+          echo "=== OpenSSL RSA 4096 Sign/Verify (Single Core Frequency) ==="
+          openssl speed rsa4096 | grep -A 1 "verify"
+
+      - name: '3. DISK: Random 4k Write (IOPS Test)'
+        run: |
+          echo "=== Small File Creation (4k Random Writes) ==="
+          # This exposes the 'Overlay' bottleneck.
+          START=$(date +%s%N)
+          mkdir -p bench-iops && cd bench-iops
+          for i in {1..5000}; do echo "data" > file_$i.txt; done
+          END=$(date +%s%N)
+          echo "IOPS 5000 files: $(( (END - START) / 1000000 ))ms"
+
+      - name: '4. MEMORY: Bandwidth'
+        run: |
+          echo "=== Memory Copy Speed ==="
+          if command -v dd &> /dev/null; then
+            dd if=/dev/zero of=/dev/null bs=1M count=10000 2>&1 | tail -n 1
           fi
 
-      - name: 'Benchmark: Python operations'
+      - name: '5. NETWORK: Real World Git (Internal Timer)'
         run: |
-          echo "=== Python Operations ==="
-          if command -v python3 &> /dev/null; then
-            python3 -c "import json, time; start = time.time(); data = {'test': 'data', 'nested': {'a': 1, 'b':[1,2,3]}}; [json.dumps(data) for _ in range(100000)]; print('JSON serialization: ' + str(int((time.time() - start) * 1000)) + 'ms')"
-          fi
-
-      - name: 'Benchmark: File I/O'
-        run: |
-          echo "=== File I/O Benchmark ==="
+          echo "=== Linux Kernel Clone (Network + I/O) ==="
           START=$(date +%s%N)
-          dd if=/dev/urandom of="/tmp/testfile-${{ matrix.id }}" bs=1M count=100 2>&1 | tail -1
+          git clone --depth 1 https://github.com/torvalds/linux.git "/tmp/linux-${{ matrix.id }}" --quiet
           END=$(date +%s%N)
-          echo "Write 100MB: $(( (END - START) / 1000000 ))ms"
-          
-          START=$(date +%s%N)
-          cat "/tmp/testfile-${{ matrix.id }}" > /dev/null
-          END=$(date +%s%N)
-          echo "Read 100MB: $(( (END - START) / 1000000 ))ms"
-
-      - name: 'Benchmark: Network speed'
-        run: |
-          echo "=== Network Speed Test ==="
-          START=$(date +%s%N)
-          curl -s -o /dev/null https://ash-speed.hetzner.com/100MB.bin 2>&1
-          END=$(date +%s%N)
-          echo "Download 100MB: $(( (END - START) / 1000000 ))ms"
+          echo "ACTUAL Clone Time (Excluding Agent Lag): $(( (END - START) / 1000000 ))ms"
 
       - name: 'Cleanup'
         if: always()
-        run: |
-          rm -rf "/tmp/linux-test-${{ matrix.id }}" "/tmp/node-test-${{ matrix.id }}" "/tmp/testfile-${{ matrix.id }}"
-          echo "Cleanup complete"
-
-  # STEP 3: Simple completion summary
-  results-summary:
-    needs: run-benchmarks
-    if: always()
-    runs-on: ubuntu-latest
-    steps:
-      - name: 'Summary'
-        run: |
-          echo "Benchmark Run Complete"
-          echo "Mode: ${{ github.event.inputs.runner_type }}"
-          echo "Workflow: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+        run: rm -rf testdata testdata.xz bench-iops "/tmp/linux-${{ matrix.id }}"
