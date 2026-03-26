@@ -261,13 +261,15 @@ jobs:
 
       - name: '17. BUILD: Compile Go Application'
         run: |
-          echo "=== BUILD: Go Compilation (golang.org/x/term) ==="
+          echo "=== BUILD: Go Compilation (Fibonacci) ==="
           cd /tmp
           rm -rf go-bench 2>/dev/null
+          mkdir go-bench && cd go-bench
+          printf 'package main\n\nimport "fmt"\n\nfunc fib(n int) int {\n    if n < 2 { return n }\n    return fib(n-1) + fib(n-2)\n}\n\nfunc main() {\n    result := 0\n    for i := 0; i < 30; i++ {\n        result = fib(i)\n    }\n    fmt.Println(result)\n}\n' > main.go
           START=$(date +%s%N)
-          GO111MODULE=on go install golang.org/x/term@latest 2>&1
+          go build -o app main.go 2>&1
           END=$(date +%s%N)
-          echo "Go install x/term: $(( (END - START) / 1000000 ))ms"
+          echo "Go compile: $(( (END - START) / 1000000 ))ms"
 
       - name: '18. BUILD: Compile Rust (cargo build)'
         run: |
