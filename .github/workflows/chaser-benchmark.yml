@@ -246,7 +246,7 @@ jobs:
             cd /tmp
             rm -rf docker-bench 2>/dev/null
             mkdir -p docker-bench && cd docker-bench
-            printf '%s\n' 'FROM golang:1.21-alpine AS builder' 'WORKDIR /app' 'RUN go version' 'COPY . .' 'RUN CGO_ENABLED=0 GOOS=linux go build -o app .' 'FROM alpine:latest' 'COPY --from=builder /app/app /app' 'CMD ["ls"]' > Dockerfile
+            printf '%s\n' 'FROM golang:1.21-alpine AS builder' 'WORKDIR /app' 'RUN go version' 'RUN go mod init app' 'COPY . .' 'RUN CGO_ENABLED=0 GOOS=linux go build -o app .' 'FROM alpine:latest' 'COPY --from=builder /app/app /app' 'CMD ["ls"]' > Dockerfile
             echo "package main" > main.go
             START=$(date +%s%N)
             docker build -t docker-bench . 2>&1 | tail -3
@@ -373,6 +373,34 @@ jobs:
           echo "Chaser 9950X vs GitHub Standard vs Blacksmith"
           echo "============================================"
 
+      - name: Create Results JSON
+        run: |
+          cat << EOF > /tmp/results-${{ matrix.id }}.json
+          {
+            "runner": "${{ matrix.id }}",
+            "name": "${{ matrix.name }}",
+            "system": "${{ steps.sysinfo.outputs.sysinfo }}",
+            "bench1": "${{ steps.bench1.outputs.bench1 }}",
+            "bench2": "${{ steps.bench2.outputs.bench2 }}",
+            "bench5": "${{ steps.bench5.outputs.bench5 }}",
+            "bench6": "${{ steps.bench6.outputs.bench6 }}",
+            "bench7": "${{ steps.bench7.outputs.bench7 }}",
+            "bench11": "${{ steps.bench11.outputs.bench11 }}",
+            "bench12": "${{ steps.bench12.outputs.bench12 }}",
+            "bench14": "${{ steps.bench14.outputs.bench14 }}",
+            "bench15": "${{ steps.bench15.outputs.bench15 }}",
+            "bench16": "${{ steps.bench16.outputs.bench16 }}",
+            "bench22": "${{ steps.bench22.outputs.bench22 }}"
+          }
+          EOF
+
+      - name: Upload Results
+        uses: actions/upload-artifact@v4
+        with:
+          name: results-${{ matrix.id }}
+          path: /tmp/results-${{ matrix.id }}.json
+          retention-days: 1
+
       - name: Cleanup
         if: always()
         run: |
@@ -383,32 +411,37 @@ jobs:
 
   compare-results:
     needs: run-benchmarks
-    if: github.event.inputs.runner_type == 'all' || github.event.inputs.runner_type == ''
+    if: github.event.inputs.runner_type == 'all'
     runs-on: ubuntu-latest
     steps:
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
+
+      - name: Download All Results
+        uses: actions/download-artifact@v4
+        with:
+          path: results
+          pattern: results-*
+
       - name: Compare All Runners
         run: |
           echo "============================================"
           echo "RUNNER COMPARISON SUMMARY"
           echo "============================================"
           echo ""
-          echo "| Test | Chaser 9950X | GitHub Standard | Blacksmith |"
-          echo "|------|-------------|-----------------|------------|"
-          echo "| CPU Cores | See logs | See logs | See logs |"
-          echo "|"
-          echo "Run the workflow with each runner type individually to get detailed results:"
-          echo "- Select 'chaser' for Chaser 9950X"
-          echo "- Select 'standard' for GitHub Standard"  
-          echo "- Select 'blacksmith' for Blacksmith"
-          echo "- Select 'all' to run all three in parallel"
+
+          echo "| Benchmark | Chaser 9950X | GitHub Standard | Blacksmith |"
+          echo "|-----------|-------------|-----------------|------------|"
+
+          for bench in system bench1 bench2 bench5 bench6 bench7 bench11 bench12 bench14 bench15 bench16 bench22; do
+            chaser=$(jq -r '.$bench' results/results-chaser/$bench.json 2>/dev/null || echo "N/A")
+            standard=$(jq -r '.$bench' results/results-standard/$bench.json 2>/dev/null || echo "N/A")
+            blacksmith=$(jq -r '.$bench' results/results-blacksmith/$bench.json 2>/dev/null || echo "N/A")
+            echo "| $bench | $chaser | $standard | $blacksmith |"
+          done
+
           echo ""
-          echo "Key benchmarks to compare:"
-          echo "1. XZ Compression (multi-threaded CPU)"
-          echo "2. Sequential Disk I/O"
-          echo "3. Small file IOPS (overlay fs test)"
-          echo "4. Git clone times"
-          echo "5. npm/pip install times"
-          echo "6. Docker build times"
-          echo "7. Full CI pipeline simulation"
-          echo ""
+          echo "============================================"
+          echo "Raw JSON files available in results directory"
+          ls -la results/
           echo "============================================"
