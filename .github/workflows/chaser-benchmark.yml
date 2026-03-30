@@ -164,6 +164,7 @@ jobs:
 
       - name: '9. MEMORY: Bandwidth (dd)'
         run: |
+          pip install --quiet numpy pandas scipy scikit-learn
           echo "=== MEMORY: dd Memory Copy (10GB) ==="
           dd if=/dev/zero of=/dev/null bs=1M count=10240 2>&1 | tail -n 1
 
